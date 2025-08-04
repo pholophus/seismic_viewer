@@ -22,13 +22,7 @@ A web-based 2D seismic data viewer built with Flask that allows you to visualize
 
 Make sure you have the project files in your local directory.
 
-### 2. Navigate to the Flask Directory
-
-```bash
-cd flask
-```
-
-### 3. Install Required Dependencies
+### 2. Install Required Dependencies
 
 Install all required Python packages using the requirements.txt file:
 
