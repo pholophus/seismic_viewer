@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>2D Seismic Viewer</title>
+    <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script> -->
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+    <style>
+        #seismic-plot {
+            width: 100%;
+            height: 80vh;
+        }
+        .ebcdic-header {
+            border: 2px solid #0055a4;
+            border-radius: 5px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        .ebcdic-header-title {
+            background-color: #0055a4;
+            color: white;
+            padding: 5px 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .ebcdic-header-content {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            padding: 8px;
+            max-height: 800px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            border-top: 1px solid #ccc;
+        }
+        .ebcdic-header-content p {
+            margin: 0;
+            line-height: 1.4;
+        }
+        .ebcdic-header-content p span.line-number {
+            color: #0055a4;
+            margin-right: 10px;
+        }
+
+        .metadata-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 300px;
+        }
+        .metadata-card h3 {
+            margin: 0 0 10px;
+            font-size: 16px;
+            color: #333;
+        }
+        .metadata-card p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        .metadata-card p span {
+            font-weight: bold;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>2D Seismic Viewer</h1>
+    <div id="seismic-plot"></div>
+    <button onclick="loadMore()">Load More Traces</button>
+    <div class="ebcdic-header">
+        <div class="ebcdic-header-title">EBCDIC Header</div>
+        <div class="ebcdic-header-content" id="header-container"></div>
+    </div>
+    <div class="metadata-card" id="metadata-container"></div>
+    <script>
+        let startTrace = 0;
+        const tracesPerLoad = 6000;
+
+        function fetchSeismicData(start, end) {
+            fetch(`/get_seismic_data?start_trace=${start}&end_trace=${end}`)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (result.error) {
+                        throw new Error(result.error);
+                    }
+                    const data = result.data;
+                    const sample_rate = result.sample_rate;
+                    const n_traces = result.n_traces;
+                    const n_samples = result.n_samples;
+                    const total_traces = result.total_traces;
+
+                    const y = Array.from({ length: n_samples }, (_, i) => i * sample_rate);
+                    const x = Array.from({ length: n_traces }, (_, i) => i + result.start_trace);
+
+                    const plotData = [{
+                        z: data,
+                        x: x,
+                        y: y,
+                        type: 'heatmap',
+                        colorscale: 'RdBu',
+                        showscale: true
+                    }];
+
+                    const layout = {
+                        title: `2D Seismic Section (Traces ${result.start_trace} to ${result.start_trace + n_traces - 1})`,
+                        xaxis: { title: 'Trace Number' },
+                        yaxis: { 
+                            title: 'Time (ms)', 
+                            autorange: 'reversed'
+                        },
+                        margin: { t: 50, r: 50, b: 50, l: 50 }
+                    };
+
+                    Plotly.newPlot('seismic-plot', plotData, layout);
+                    startTrace = result.start_trace + n_traces;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('seismic-plot').innerHTML = 
+                        `<p>Error loading seismic data: ${error.message}</p>`;
+                });
+        }
+
+        function fetchEbcdicHeader(){
+            fetch('/get_ebcdic_header')
+                .then(response => {
+                    console.log("Header response status: ", response.status);
+                    if(!response.ok){
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (result.error) {
+                        throw new Error(result.error);
+                    }
+                    const headerLines = result.header;
+                    let htmlContent = '';
+                    headerLines.forEach((line, index) => {
+                        const lineNum = `C${(index + 1).toString().padStart(2, '0')}`;
+                        htmlContent += `<p><span class="line-number">${lineNum}</span>${line.trim()}</p>`;
+                    });
+                    document.getElementById('header-container').innerHTML = htmlContent;
+                })
+                .catch(error => {
+                    console.error('Error fetching EBCDIC header:', error);
+                    document.getElementById('header-container').textContent = 
+                        `Error loading EBCDIC header: ${error.message}`;
+                });
+        }
+
+        function fetchFileMetadata(){
+            fetch('/get_file_metadata')
+                .then(response => {
+                    console.log('Metadata repsonse status:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (result.error) {
+                        throw new Error(result.error);
+                    }
+                    let htmlContent = '<h3>File Metadata</h3>';
+                    htmlContent += `<p><span>FFID Range:</span> ${result.ffid_range}</p>`;
+                    htmlContent += `<p><span>SP Range:</span> ${result.sp_range}</p>`;
+                    htmlContent += `<p><span>CDP Range:</span> ${result.cdp_range}</p>`;
+                    htmlContent += `<p><span>Sample Rate:</span> ${result.sample_rate}</p>`;
+                    document.getElementById('metadata-container').innerHTML = htmlContent;
+                })
+                .catch(error => {
+                    console.error('Error fetching file metadata:', error);
+                    document.getElementById('metadata-container').innerHTML = 
+                        `<h3>File Metadata</h3><p>Error loading metadata: ${error.message}</p>`;
+                });
+        }
+
+        // Initial load
+        fetchSeismicData(startTrace, startTrace + tracesPerLoad);
+        fetchEbcdicHeader();
+        fetchFileMetadata();
+
+        function loadMore() {
+            fetchSeismicData(startTrace, startTrace + tracesPerLoad);
+        }
+    </script>
+</body>
+</html>
