@@ -18,11 +18,7 @@ A web-based 2D seismic data viewer built with Flask that allows you to visualize
 
 ## Installation
 
-### 1. Clone or Download the Project
-
-Make sure you have the project files in your local directory.
-
-### 2. Install Required Dependencies
+### 1. Install Required Dependencies
 
 Install all required Python packages using the requirements.txt file:
 
