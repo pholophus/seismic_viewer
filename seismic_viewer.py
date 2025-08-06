@@ -13,17 +13,16 @@ def get_seismic_data(file_path, start_trace=0, end_trace=None):
             start_trace = max(0, start_trace)
             if start_trace >= n_traces or end_trace <= start_trace:
                 return {'error': 'Invalid trace range'}
-            # Read only the specified range of traces
-            data = np.zeros((n_samples, end_trace - start_trace))
-            for i, trace_idx in enumerate(range(start_trace, end_trace)):
-                data[:, i] = segyfile.trace[trace_idx]
+            # Use bulk reading instead of individual trace access
+            data = segyfile.trace.raw[start_trace:end_trace].T
             return {
-                'data': data.tolist(),
+                'data': data.tobytes(),  # Convert to binary format
                 'sample_rate': float(sample_rate),
                 'n_traces': end_trace - start_trace,
                 'n_samples': n_samples,
                 'start_trace': start_trace,
-                'total_traces': n_traces
+                'total_traces': n_traces,
+                'dtype': str(data.dtype)  # Include data type for reconstruction
             }
     except Exception as e:
         return {'error': str(e)}

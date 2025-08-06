@@ -1,15 +1,17 @@
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, Response
 from flask_cors import CORS
 from seismic_viewer import get_seismic_data, get_ebcdic_header, get_file_metadata
 import logging
+import json
 
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 
 # Configuration - single source of truth for file path
-# SEISMIC_FILE_PATH = '../data/MYS1993P20152DM01PMOREGION/MYS1993P20152DM01PMOREGION_RC93-002_UNFILT_SCAL_MIGR_flatten.sgy'
-SEISMIC_FILE_PATH = '/mnt/skkmigassfs/West Bangkanai/2013_AFE 13-0004_2D Seismic Reprocessing (West Bangkanai Teweh 2D)/WEST_BANGKANAI TEWEH 2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
+SEISMIC_FILE_PATH = '/Users/afedsetup/Documents/afed_documents/2D Seismic/2D MALAY BASIN/MYS19892DM2PM-5_8/MYS19892DM2PM-5_8_P89A231_FILT_SCAL_MIGR.sgy'
+SEISMIC_FILE_PATH = '../data/MYS1993P20152DM01PMOREGION/MYS1993P20152DM01PMOREGION_RC93-002_UNFILT_SCAL_MIGR_flatten.sgy'
+# SEISMIC_FILE_PATH = '/mnt/skkmigassfs/West Bangkanai/2013_AFE 13-0004_2D Seismic Reprocessing (West Bangkanai Teweh 2D)/WEST_BANGKANAI TEWEH 2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
 # SEISMIC_FILE_PATH = '/Volumes/homes/public/SKKMigas_WestBangkanai/Seismic/2013_AFE 13-0004_2D_seismic_Repro_WestBangkanai_Teweh_2D/West_Bangkanai_Teweh_2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
 # SEISMIC_FILE_PATH = '/root/seismic_data/2d/FINAL_PSTM_STACK_KT85_02.sgy'
 
@@ -25,8 +27,18 @@ def serve_seismic_data():
     if 'error' in result:
         app.logger.error(f"Error in get_seismic_data: {result['error']}")
         return jsonify(result), 500
+    
+    # Extract binary data and metadata
+    binary_data = result['data']
+    metadata = {k: v for k, v in result.items() if k != 'data'}
+    
+    # Create response with binary data and JSON metadata in headers
+    response = Response(binary_data, mimetype='application/octet-stream')
+    response.headers['X-Metadata'] = json.dumps(metadata)
+    response.headers['Access-Control-Expose-Headers'] = 'X-Metadata'
+    
     app.logger.debug("Successfully processed SEG-Y data")
-    return jsonify(result)
+    return response
 
 @app.route('/get_ebcdic_header', methods=['GET'])
 def serve_ebcdic_header():

@@ -86,20 +86,52 @@
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
                     }
-                    return response.json();
-                })
-                .then(result => {
-                    if (result.error) {
-                        throw new Error(result.error);
+                    
+                    // Parse metadata from headers
+                    const metadataJson = response.headers.get('X-Metadata');
+                    if (!metadataJson) {
+                        throw new Error('Missing metadata in response headers');
                     }
-                    const data = result.data;
-                    const sample_rate = result.sample_rate;
-                    const n_traces = result.n_traces;
-                    const n_samples = result.n_samples;
-                    const total_traces = result.total_traces;
+                    const metadata = JSON.parse(metadataJson);
+                    
+                    if (metadata.error) {
+                        throw new Error(metadata.error);
+                    }
+                    
+                    // Get binary data
+                    return response.arrayBuffer().then(buffer => ({ buffer, metadata }));
+                })
+                .then(({ buffer, metadata }) => {
+                    // Reconstruct numpy array from binary data
+                    const dtype = metadata.dtype;
+                    let typedArray;
+                    
+                    // Handle different numpy dtypes
+                    if (dtype.includes('float32')) {
+                        typedArray = new Float32Array(buffer);
+                    } else if (dtype.includes('float64')) {
+                        typedArray = new Float64Array(buffer);
+                    } else if (dtype.includes('int32')) {
+                        typedArray = new Int32Array(buffer);
+                    } else {
+                        // Default to Float32Array
+                        typedArray = new Float32Array(buffer);
+                    }
+                    
+                    // Convert to 2D array for Plotly (samples x traces)
+                    const n_samples = metadata.n_samples;
+                    const n_traces = metadata.n_traces;
+                    const data = [];
+                    
+                    for (let i = 0; i < n_samples; i++) {
+                        data[i] = [];
+                        for (let j = 0; j < n_traces; j++) {
+                            data[i][j] = typedArray[i * n_traces + j];
+                        }
+                    }
 
-                    const y = Array.from({ length: n_samples }, (_, i) => i * sample_rate);
-                    const x = Array.from({ length: n_traces }, (_, i) => i + result.start_trace);
+                    const y = Array.from({ length: n_samples }, (_, i) => i * metadata.sample_rate);
+                    const x = Array.from({ length: n_traces }, (_, i) => i + metadata.start_trace);
 
                     const plotData = [{
                         z: data,
@@ -111,7 +143,7 @@
                     }];
 
                     const layout = {
-                        title: `2D Seismic Section (Traces ${result.start_trace} to ${result.start_trace + n_traces - 1})`,
+                        title: `2D Seismic Section (Traces ${metadata.start_trace} to ${metadata.start_trace + n_traces - 1})`,
                         xaxis: { title: 'Trace Number' },
                         yaxis: { 
                             title: 'Time (ms)', 
@@ -121,7 +153,7 @@
                     };
 
                     Plotly.newPlot('seismic-plot', plotData, layout);
-                    startTrace = result.start_trace + n_traces;
+                    startTrace = metadata.start_trace + n_traces;
                 })
                 .catch(error => {
                     console.error('Error:', error);
