@@ -9,11 +9,11 @@ CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 
 # Configuration - single source of truth for file path
-SEISMIC_FILE_PATH = '/Users/afedsetup/Documents/afed_documents/2D Seismic/2D MALAY BASIN/MYS19892DM2PM-5_8/MYS19892DM2PM-5_8_P89A231_FILT_SCAL_MIGR.sgy'
-SEISMIC_FILE_PATH = '../data/MYS1993P20152DM01PMOREGION/MYS1993P20152DM01PMOREGION_RC93-002_UNFILT_SCAL_MIGR_flatten.sgy'
+# SEISMIC_FILE_PATH = '/Users/afedsetup/Documents/afed_documents/2D Seismic/2D MALAY BASIN/MYS19892DM2PM-5_8/MYS19892DM2PM-5_8_P89A231_FILT_SCAL_MIGR.sgy'
+# SEISMIC_FILE_PATH = '../data/MYS1993P20152DM01PMOREGION/MYS1993P20152DM01PMOREGION_RC93-002_UNFILT_SCAL_MIGR_flatten.sgy'
 # SEISMIC_FILE_PATH = '/mnt/skkmigassfs/West Bangkanai/2013_AFE 13-0004_2D Seismic Reprocessing (West Bangkanai Teweh 2D)/WEST_BANGKANAI TEWEH 2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
 # SEISMIC_FILE_PATH = '/Volumes/homes/public/SKKMigas_WestBangkanai/Seismic/2013_AFE 13-0004_2D_seismic_Repro_WestBangkanai_Teweh_2D/West_Bangkanai_Teweh_2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
-# SEISMIC_FILE_PATH = '/root/seismic_data/2d/FINAL_PSTM_STACK_KT85_02.sgy'
+SEISMIC_FILE_PATH = '/root/seismic_data/2d/FINAL_PSTM_STACK_KT85_02.sgy'
 
 @app.route('/get_seismic_data', methods=['GET'])
 def serve_seismic_data():
