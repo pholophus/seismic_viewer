@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, send_from_directory, request, Response
 from flask_cors import CORS
-from seismic_viewer import get_seismic_data, get_ebcdic_header, get_file_metadata
+from seismic_viewer import get_seismic_data, get_ebcdic_header, get_file_metadata, get_file_path_from_api
 import logging
 import json
 
@@ -8,22 +8,40 @@ app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 
-# Configuration - single source of truth for file path
-# SEISMIC_FILE_PATH = '/Users/afedsetup/Documents/afed_documents/2D Seismic/2D MALAY BASIN/MYS19892DM2PM-5_8/MYS19892DM2PM-5_8_P89A231_FILT_SCAL_MIGR.sgy'
-# SEISMIC_FILE_PATH = '../data/MYS1993P20152DM01PMOREGION/MYS1993P20152DM01PMOREGION_RC93-002_UNFILT_SCAL_MIGR_flatten.sgy'
-# SEISMIC_FILE_PATH = '/mnt/skkmigassfs/West Bangkanai/2013_AFE 13-0004_2D Seismic Reprocessing (West Bangkanai Teweh 2D)/WEST_BANGKANAI TEWEH 2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
-# SEISMIC_FILE_PATH = '/Volumes/homes/public/SKKMigas_WestBangkanai/Seismic/2013_AFE 13-0004_2D_seismic_Repro_WestBangkanai_Teweh_2D/West_Bangkanai_Teweh_2D/4. FINAL_PSTM_STACK/FINAL_PSTM_STACK_KT85_02.sgy'
-SEISMIC_FILE_PATH = '/root/seismic_data/2d/FINAL_PSTM_STACK_KT85_02.sgy'
+@app.route('/get_file_path_from_api', methods=['GET'])
+def serve_file_path_from_api():
+    geofile_id = request.args.get('geofile_id', None)
+    jwt_token = request.args.get('jwt_token', None)
+    
+    if not geofile_id:
+        return jsonify({'error': 'geofile_id parameter is required'}), 400
+    
+    app.logger.debug(f"Calling get_file_path_from_api with geofile_id: {geofile_id}")
+    result = get_file_path_from_api(geofile_id, jwt_token)
+    
+    if 'error' in result:
+        app.logger.error(f"Error in get_file_path_from_api: {result['error']}")
+        return jsonify(result), 500
+    
+    app.logger.debug("Successfully retrieved file path from API")
+    return jsonify(result)
 
 @app.route('/get_seismic_data', methods=['GET'])
 def serve_seismic_data():
     start_trace = int(request.args.get('start_trace', 0))
     end_trace = request.args.get('end_trace', None)
+    geofile_id = request.args.get('geofile_id', None)
+    jwt_token = request.args.get('jwt_token', None)
+
+    if not geofile_id:
+        return jsonify({'error': 'geofile_id parameter is required'}), 400
 
     if end_trace is not None:
         end_trace = int(end_trace)
-    app.logger.debug(f"Reading traces {start_trace} to {end_trace} from {SEISMIC_FILE_PATH}")
-    result = get_seismic_data(SEISMIC_FILE_PATH, start_trace, end_trace)
+    
+    app.logger.debug(f"Reading traces {start_trace} to {end_trace} using geofile_id: {geofile_id}")
+    result = get_seismic_data(geofile_id=geofile_id, start_trace=start_trace, end_trace=end_trace, jwt_token=jwt_token)
+    
     if 'error' in result:
         app.logger.error(f"Error in get_seismic_data: {result['error']}")
         return jsonify(result), 500
@@ -42,8 +60,15 @@ def serve_seismic_data():
 
 @app.route('/get_ebcdic_header', methods=['GET'])
 def serve_ebcdic_header():
-    app.logger.debug(f"Reading EBCDIC header from {SEISMIC_FILE_PATH}")
-    result = get_ebcdic_header(SEISMIC_FILE_PATH)
+    geofile_id = request.args.get('geofile_id', None)
+    jwt_token = request.args.get('jwt_token', None)
+    
+    if not geofile_id:
+        return jsonify({'error': 'geofile_id parameter is required'}), 400
+    
+    app.logger.debug(f"Reading EBCDIC header using geofile_id: {geofile_id}")
+    result = get_ebcdic_header(geofile_id=geofile_id, jwt_token=jwt_token)
+    
     if result['error']:
         app.logger.error(f"Error in get ebcdic_header: {result['error']}")
         return jsonify(result), 500
@@ -52,8 +77,15 @@ def serve_ebcdic_header():
 
 @app.route('/get_file_metadata', methods=['GET'])
 def serve_file_metadata():
-    app.logger.debug(f"Reading file metadata from {SEISMIC_FILE_PATH}")
-    result = get_file_metadata(SEISMIC_FILE_PATH)
+    geofile_id = request.args.get('geofile_id', None)
+    jwt_token = request.args.get('jwt_token', None)
+    
+    if not geofile_id:
+        return jsonify({'error': 'geofile_id parameter is required'}), 400
+    
+    app.logger.debug(f"Reading file metadata using geofile_id: {geofile_id}")
+    result = get_file_metadata(geofile_id=geofile_id, jwt_token=jwt_token)
+    
     if result['error']:
         app.logger.error(f"Error in get_file_metadata: {result['error']}")
         return jsonify(result), 500

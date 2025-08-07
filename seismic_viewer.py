@@ -1,7 +1,57 @@
 import segyio
 import numpy as np
+import requests
+import logging
 
-def get_seismic_data(file_path, start_trace=0, end_trace=None):
+# Configuration for external API
+EXTERNAL_API_BASE_URL = "http://localhost:3000/api"
+
+def get_file_path_from_api(geofile_id, jwt_token=None):
+    """
+    Fetch file path from external API using geofile_id and optional JWT token
+    """
+    try:
+        url = f"{EXTERNAL_API_BASE_URL}/geofile/{geofile_id}"
+        logging.debug(f"Fetching file path from: {url}")
+        
+        headers = {}
+        if jwt_token:
+            headers['Authorization'] = f'Bearer {jwt_token}'
+            logging.debug("Using JWT token for authentication")
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+
+        file_path = data.get('fileLocation')
+        # Assuming the API returns a JSON with a 'file_path' or 'path' key
+        # You may need to adjust this based on your actual API response structure
+        # file_path = data.get('file_path') or data.get('path') or data.get('filePath')
+        
+        if not file_path:
+            return {'error': 'No file path found in API response'}
+        
+        logging.debug(f"Retrieved file path: {file_path}")
+        return {'file_path': file_path, 'error': None}
+        
+    except requests.exceptions.RequestException as e:
+        logging.error(f"API request failed: {str(e)}")
+        return {'error': f'Failed to fetch from external API: {str(e)}'}
+    except Exception as e:
+        logging.error(f"Unexpected error in get_file_path_from_api: {str(e)}")
+        return {'error': f'Unexpected error: {str(e)}'}
+
+def get_seismic_data(geofile_id, start_trace=0, end_trace=None, jwt_token=None):
+    """
+    Get seismic data using geofile_id to fetch file path from external API
+    """
+    # Fetch file path from external API
+    api_result = get_file_path_from_api(geofile_id, jwt_token)
+    if api_result.get('error'):
+        return api_result
+    file_path = api_result['file_path']
+    
     try:
         with segyio.open(file_path, 'r', ignore_geometry=True) as segyfile:
             n_traces = segyfile.tracecount
@@ -27,7 +77,16 @@ def get_seismic_data(file_path, start_trace=0, end_trace=None):
     except Exception as e:
         return {'error': str(e)}
     
-def get_ebcdic_header(file_path):
+def get_ebcdic_header(geofile_id, jwt_token=None):
+    """
+    Get EBCDIC header using geofile_id to fetch file path from external API
+    """
+    # Fetch file path from external API
+    api_result = get_file_path_from_api(geofile_id, jwt_token)
+    if api_result.get('error'):
+        return api_result
+    file_path = api_result['file_path']
+    
     try:
         with segyio.open(file_path, 'r', ignore_geometry=True) as segyfile:
             header = segyfile.text[0]
@@ -42,7 +101,16 @@ def get_ebcdic_header(file_path):
             'error': str(e)
         }
     
-def get_file_metadata(file_path):
+def get_file_metadata(geofile_id, jwt_token=None):
+    """
+    Get file metadata using geofile_id to fetch file path from external API
+    """
+    # Fetch file path from external API
+    api_result = get_file_path_from_api(geofile_id, jwt_token)
+    if api_result.get('error'):
+        return api_result
+    file_path = api_result['file_path']
+    
     try:
         with segyio.open(file_path, 'r', ignore_geometry=True) as segyfile:
             sample_interval_us = segyfile.bin[segyio.BinField.Interval] # In microseconds
