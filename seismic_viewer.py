@@ -3,6 +3,10 @@ import numpy as np
 import requests
 import logging
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration for external API - read from environment variable
 EXTERNAL_API_BASE_URL = os.getenv('EXTERNAL_API_BASE_URL', 'http://localhost:3000/api')
