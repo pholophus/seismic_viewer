@@ -2,9 +2,10 @@ import segyio
 import numpy as np
 import requests
 import logging
+import os
 
-# Configuration for external API
-EXTERNAL_API_BASE_URL = "http://localhost:3000/api"
+# Configuration for external API - read from environment variable
+EXTERNAL_API_BASE_URL = os.getenv('EXTERNAL_API_BASE_URL', 'http://localhost:3000/api')
 
 def get_file_path_from_api(geofile_id, jwt_token=None):
     """

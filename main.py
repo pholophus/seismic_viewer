@@ -3,6 +3,10 @@ from flask_cors import CORS
 from seismic_viewer import get_seismic_data, get_ebcdic_header, get_file_metadata, get_file_path_from_api
 import logging
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
