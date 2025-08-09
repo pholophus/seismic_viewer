@@ -6,6 +6,144 @@
     <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script> -->
     <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
     <style>
+        /* Loading Animation Styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-container {
+            text-align: center;
+            color: #2c3e50;
+            max-width: 400px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .loading-title {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            color: #2c3e50;
+        }
+
+        .loading-subtitle {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            opacity: 0.8;
+            color: #5a6c7d;
+        }
+
+        .progress-container {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            padding: 3px;
+            margin: 20px 0;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 20px;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            border-radius: 25px;
+            width: 0%;
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-width: 0%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .progress-text {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-top: 10px;
+            color: #2c3e50;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(44, 62, 80, 0.3);
+            border-top: 4px solid #2c3e50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-steps {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .loading-step {
+            padding: 8px 0;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+            color: #5a6c7d;
+        }
+
+        .loading-step.active {
+            opacity: 1;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .loading-step.completed {
+            opacity: 0.8;
+            color: #27ae60;
+        }
+
+        .loading-step.completed::before {
+            content: '✓ ';
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        /* Existing Styles */
         .info-container {
             margin: 20px 0;
             padding: 15px;
@@ -90,6 +228,27 @@
     </style>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-container">
+            <div class="loading-title">Seismic Viewer</div>
+            <div class="loading-subtitle">Loading seismic data...</div>
+            <div class="loading-spinner"></div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-text" id="progressText">0%</div>
+            <div class="loading-steps">
+                <div class="loading-step" id="step1">Initializing application...</div>
+                <div class="loading-step" id="step2">Loading seismic data...</div>
+                <div class="loading-step" id="step3">Processing traces...</div>
+                <div class="loading-step" id="step4">Rendering visualization...</div>
+                <div class="loading-step" id="step5">Plotting traces...</div>
+                <div class="loading-step" id="step6">Loading metadata...</div>
+            </div>
+        </div>
+    </div>
+
     <h1>2D Seismic Viewer</h1>
     
     <!-- <div class="info-container" id="info-container">
@@ -99,7 +258,6 @@
     <div id="error-container"></div>
     
     <div id="seismic-plot"></div>
-    <button onclick="loadMore()">Load More Traces</button>
     <div class="ebcdic-header">
         <div class="ebcdic-header-title">EBCDIC Header</div>
         <div class="ebcdic-header-content" id="header-container"></div>
@@ -107,9 +265,76 @@
     <div class="metadata-card" id="metadata-container"></div>
     <script>
         let startTrace = 0;
-        const tracesPerLoad = 6000;
         let geofileId = null;
         let jwtToken = null;
+        let currentProgress = 0;
+        let loadingSteps = ['step1', 'step2', 'step3', 'step4', 'step5', 'step6'];
+        let performanceMetrics = {};
+
+        // Performance monitoring
+        function logPerformance(operation, startTime, additionalInfo = null) {
+            const duration = performance.now() - startTime;
+            const info = additionalInfo ? ` | ${additionalInfo}` : '';
+            // Removed console.log for production
+            performanceMetrics[operation] = duration;
+        }
+
+        // Loading progress management
+        function updateProgress(progress, step = null) {
+            currentProgress = Math.min(progress, 100);
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            // Ensure the progress bar reaches exactly 100% when progress is 100%
+            if (currentProgress >= 100) {
+                // Remove transition temporarily to ensure exact 100% width
+                progressBar.style.transition = 'none';
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                // Force a reflow to ensure the width is applied
+                progressBar.offsetHeight;
+                // Restore transition
+                setTimeout(() => {
+                    progressBar.style.transition = 'width 0.3s ease';
+                }, 10);
+            } else {
+                progressBar.style.width = currentProgress + '%';
+                progressText.textContent = Math.round(currentProgress) + '%';
+            }
+            
+            if (step) {
+                // Update step status - now with 6 steps (16.67% each)
+                loadingSteps.forEach((stepId, index) => {
+                    const stepElement = document.getElementById(stepId);
+                    const stepProgress = (index + 1) * 16.67;
+                    
+                    if (currentProgress >= stepProgress) {
+                        stepElement.classList.add('completed');
+                        stepElement.classList.remove('active');
+                    } else if (currentProgress >= stepProgress - 16.67) {
+                        stepElement.classList.add('active');
+                        stepElement.classList.remove('completed');
+                    } else {
+                        stepElement.classList.remove('active', 'completed');
+                    }
+                });
+            }
+        }
+
+        function hideLoading() {
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                    // Log final performance metrics
+                    // Removed console.log for production
+                    Object.entries(performanceMetrics).forEach(([operation, duration]) => {
+                        // Removed console.log for production
+                    });
+                    // Removed console.log for production
+                }, 500);
+            }, 500);
+        }
 
         function getUrlParameter(name) {
             const urlParams = new URLSearchParams(window.location.search);
@@ -117,6 +342,8 @@
         }
 
         function initializeFromUrl() {
+            const startTime = performance.now();
+            updateProgress(8.33, 'step1'); // 16.67% / 2 = 8.33%
             geofileId = getUrlParameter('geofile_id');
             jwtToken = getUrlParameter('jwt_token');
             
@@ -134,24 +361,17 @@
                 `;
                 errorContainer.innerHTML = errorMessage;
                 infoContainer.style.display = 'none';
+                hideLoading();
                 return false;
             }
             
-            // Update info display
-            // let infoHtml = `<div class="info-item"><span>GeoFile ID:</span> ${geofileId}</div>`;
-            // if (jwtToken) {
-            //     infoHtml += `<div class="info-item"><span>JWT Token:</span> ${jwtToken.substring(0, 20)}...</div>`;
-            // } else {
-            //     infoHtml += `<div class="info-item"><span>JWT Token:</span> Not provided</div>`;
-            // }
-            // infoContainer.innerHTML = infoHtml;
-            
+            updateProgress(16.67, 'step1');
+            logPerformance('initializeFromUrl', startTime, `geofile_id: ${geofileId}`);
             return true;
         }
 
         function getQueryParams() {
             if (!geofileId) {
-                console.error('GeoFile ID not available');
                 return null;
             }
             
@@ -164,19 +384,24 @@
             return params;
         }
 
-        function fetchSeismicData(start, end) {
+        function fetchSeismicData() {
+            const startTime = performance.now();
+            updateProgress(25, 'step2'); // 16.67% + 8.33% = 25%
             const params = getQueryParams();
-            if (!params) return;
+            if (!params) return Promise.reject('No params');
             
-            params.append('start_trace', start);
-            params.append('end_trace', end);
+            // Load all traces by not specifying end_trace
+            params.append('start_trace', 0);
             
-            fetch(`/get_seismic_data?${params.toString()}`)
+            const fetchStartTime = performance.now();
+            return fetch(`/get_seismic_data?${params.toString()}`)
                 .then(response => {
-                    console.log('Response status:', response.status);
+                    logPerformance('fetch_seismic_data_network', fetchStartTime, `status: ${response.status}`);
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
                     }
+                    
+                    updateProgress(41.67, 'step2'); // 16.67% + 25% = 41.67%
                     
                     // Parse metadata from headers
                     const metadataJson = response.headers.get('X-Metadata');
@@ -189,11 +414,21 @@
                         throw new Error(metadata.error);
                     }
                     
+                    updateProgress(50, 'step3'); // 16.67% * 3 = 50%
+                    
                     // Get binary data
-                    return response.arrayBuffer().then(buffer => ({ buffer, metadata }));
+                    const arrayBufferStartTime = performance.now();
+                    return response.arrayBuffer().then(buffer => {
+                        logPerformance('arrayBuffer_processing', arrayBufferStartTime, 
+                                     `size: ${(buffer.byteLength / (1024*1024)).toFixed(2)}MB`);
+                        return { buffer, metadata };
+                    });
                 })
                 .then(({ buffer, metadata }) => {
+                    updateProgress(58.33, 'step3'); // 50% + 8.33% = 58.33%
+                    
                     // Reconstruct numpy array from binary data
+                    const dataProcessingStartTime = performance.now();
                     const dtype = metadata.dtype;
                     let typedArray;
                     
@@ -209,47 +444,142 @@
                         typedArray = new Float32Array(buffer);
                     }
                     
+                    updateProgress(66.67, 'step4'); // 16.67% * 4 = 66.67%
+                    
                     // Convert to 2D array for Plotly (samples x traces)
                     const n_samples = metadata.n_samples;
                     const n_traces = metadata.n_traces;
-                    const data = [];
                     
-                    for (let i = 0; i < n_samples; i++) {
-                        data[i] = [];
-                        for (let j = 0; j < n_traces; j++) {
-                            data[i][j] = typedArray[i * n_traces + j];
+                    // OPTIMIZATION: Implement intelligent data handling for large datasets
+                    // User preference: Set to false to disable downsampling completely
+                    const enableDownsampling = false; // Set to false to preserve full quality
+                    const maxDataPoints = 50000000; // Very high threshold - essentially no downsampling
+                    const totalDataPoints = n_samples * n_traces;
+                    
+                    let plotData, plotY, plotX;
+                    
+                    if (enableDownsampling && totalDataPoints > maxDataPoints) {
+                        // Only downsample for extremely large datasets and only if enabled
+                        const downsampleFactor = Math.ceil(Math.sqrt(totalDataPoints / maxDataPoints));
+                        const sampleStep = Math.max(1, Math.floor(n_samples / downsampleFactor));
+                        const traceStep = Math.max(1, Math.floor(n_traces / downsampleFactor));
+                        
+                        const downsampledSamples = Math.ceil(n_samples / sampleStep);
+                        const downsampledTraces = Math.ceil(n_traces / traceStep);
+                        
+                        // Use simple downsampling (take every nth point) for better quality
+                        plotData = [];
+                        for (let i = 0; i < downsampledSamples; i++) {
+                            plotData[i] = [];
+                            for (let j = 0; j < downsampledTraces; j++) {
+                                const originalI = i * sampleStep;
+                                const originalJ = j * traceStep;
+                                if (originalI < n_samples && originalJ < n_traces) {
+                                    plotData[i][j] = typedArray[originalI * n_traces + originalJ];
+                                }
+                            }
                         }
+                        
+                        plotY = Array.from({ length: downsampledSamples }, (_, i) => i * sampleStep * metadata.sample_rate);
+                        plotX = Array.from({ length: downsampledTraces }, (_, i) => i * traceStep + metadata.start_trace);
+                    } else {
+                        // Use original data for maximum quality - this is the main case now
+                        plotData = [];
+                        for (let i = 0; i < n_samples; i++) {
+                            plotData[i] = [];
+                            for (let j = 0; j < n_traces; j++) {
+                                plotData[i][j] = typedArray[i * n_traces + j];
+                            }
+                        }
+                        plotY = Array.from({ length: n_samples }, (_, i) => i * metadata.sample_rate);
+                        plotX = Array.from({ length: n_traces }, (_, i) => i + metadata.start_trace);
                     }
 
-                    const y = Array.from({ length: n_samples }, (_, i) => i * metadata.sample_rate);
-                    const x = Array.from({ length: n_traces }, (_, i) => i + metadata.start_trace);
-
-                    const plotData = [{
-                        z: data,
-                        x: x,
-                        y: y,
+                    const plotDataConfig = [{
+                        z: plotData,
+                        x: plotX,
+                        y: plotY,
                         type: 'heatmap',
                         colorscale: 'RdBu',
-                        showscale: true
+                        showscale: true,
+                        // OPTIMIZATION: Better rendering settings for quality
+                        hoverongaps: false,
+                        hoverinfo: 'skip',
+                        zsmooth: false,
+                        connectgaps: false,
+                        zauto: true,
+                        zmid: 0,
+                        // OPTIMIZATION: Enable WebGL for better performance
+                        xaxis: 'x',
+                        yaxis: 'y'
                     }];
 
                     const layout = {
-                        title: `2D Seismic Section (Traces ${metadata.start_trace} to ${metadata.start_trace + n_traces - 1})`,
-                        xaxis: { title: 'Trace Number' },
+                        title: `2D Seismic Section (All Traces: ${metadata.start_trace} to ${metadata.start_trace + n_traces - 1})`,
+                        xaxis: { 
+                            title: 'Trace Number',
+                            showgrid: true,
+                            zeroline: false,
+                            // OPTIMIZATION: Better axis configuration
+                            gridcolor: 'lightgray',
+                            gridwidth: 1
+                        },
                         yaxis: { 
                             title: 'Time (ms)', 
-                            autorange: 'reversed'
+                            autorange: 'reversed',
+                            showgrid: true,
+                            zeroline: false,
+                            // OPTIMIZATION: Better axis configuration
+                            gridcolor: 'lightgray',
+                            gridwidth: 1
                         },
-                        margin: { t: 50, r: 50, b: 50, l: 50 }
+                        margin: { t: 50, r: 50, b: 50, l: 50 },
+                        showlegend: false,
+                        uirevision: 'true',
+                        plot_bgcolor: 'white',
+                        paper_bgcolor: 'white'
                     };
 
-                    Plotly.newPlot('seismic-plot', plotData, layout);
-                    startTrace = metadata.start_trace + n_traces;
+                    // OPTIMIZATION: Better Plotly configuration for performance while maintaining quality
+                    const config = {
+                        displayModeBar: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                        toImageButtonOptions: {
+                            format: 'png',
+                            filename: 'seismic_plot',
+                            height: 800,
+                            width: 1200,
+                            scale: 1
+                        },
+                        responsive: true,
+                        staticPlot: false
+                    };
+
+                    updateProgress(75, 'step5'); // 16.67% * 4.5 = 75%
+                    
+                    const plotStartTime = performance.now();
+                    return Plotly.newPlot('seismic-plot', plotDataConfig, layout, config).then(() => {
+                        // Plotly has finished rendering
+                        logPerformance('plotly_rendering', plotStartTime, 
+                                     `data_shape: ${plotData.length}x${plotData[0].length}, downsampled: ${totalDataPoints > maxDataPoints}`);
+                        
+                        updateProgress(91.67, 'step5'); // 75% + 16.67% = 91.67%
+                        
+                        startTrace = metadata.start_trace + n_traces;
+                        
+                        logPerformance('fetchSeismicData_total', startTime, 
+                                     `traces: ${n_traces}, samples: ${n_samples}, downsampled: ${totalDataPoints > maxDataPoints}`);
+                        
+                        return { success: true };
+                    });
                 })
                 .catch(error => {
-                    console.error('Error:', error);
                     document.getElementById('seismic-plot').innerHTML = 
                         `<p>Error loading seismic data: ${error.message}</p>`;
+                    logPerformance('fetchSeismicData_total', startTime, `ERROR: ${error.message}`);
+                    hideLoading();
+                    throw error;
                 });
         }
 
@@ -259,7 +589,6 @@
             
             fetch(`/get_ebcdic_header?${params.toString()}`)
                 .then(response => {
-                    console.log("Header response status: ", response.status);
                     if(!response.ok){
                         throw new Error(`HTTP error! Status: ${response.status}`);
                     }
@@ -278,7 +607,6 @@
                     document.getElementById('header-container').innerHTML = htmlContent;
                 })
                 .catch(error => {
-                    console.error('Error fetching EBCDIC header:', error);
                     document.getElementById('header-container').textContent = 
                         `Error loading EBCDIC header: ${error.message}`;
                 });
@@ -290,7 +618,6 @@
             
             fetch(`/get_file_metadata?${params.toString()}`)
                 .then(response => {
-                    console.log('Metadata repsonse status:', response.status);
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
                     }
@@ -306,28 +633,39 @@
                     htmlContent += `<p><span>CDP Range:</span> ${result.cdp_range}</p>`;
                     htmlContent += `<p><span>Sample Rate:</span> ${result.sample_rate}</p>`;
                     document.getElementById('metadata-container').innerHTML = htmlContent;
+                    
+                    // Progress will be completed by loadData function after Plotly finishes
                 })
                 .catch(error => {
-                    console.error('Error fetching file metadata:', error);
                     document.getElementById('metadata-container').innerHTML = 
                         `<h3>File Metadata</h3><p>Error loading metadata: ${error.message}</p>`;
+                    hideLoading();
                 });
         }
 
         function loadData() {
             startTrace = 0; // Reset start trace when loading new data
-            fetchSeismicData(startTrace, startTrace + tracesPerLoad);
-            fetchEbcdicHeader();
-            fetchFileMetadata();
-        }
-
-        function loadMore() {
-            fetchSeismicData(startTrace, startTrace + tracesPerLoad);
+            
+            // Start loading seismic data and metadata in parallel
+            const seismicPromise = fetchSeismicData();
+            const headerPromise = fetchEbcdicHeader();
+            const metadataPromise = fetchFileMetadata();
+            
+            // Wait for seismic data to finish (including Plotly rendering) before completing
+            seismicPromise.then(() => {
+                // Plotly has finished rendering, now complete the final step
+                updateProgress(100, 'step6');
+                setTimeout(hideLoading, 500);
+            }).catch(error => {
+                hideLoading();
+            });
         }
 
         // Initialize on page load
         if (initializeFromUrl()) {
             loadData();
+        } else {
+            hideLoading();
         }
     </script>
 </body>

@@ -1,7 +1,6 @@
 import segyio
 import numpy as np
 import requests
-import logging
 import os
 from dotenv import load_dotenv
 
@@ -17,12 +16,10 @@ def get_file_path_from_api(geofile_id, jwt_token=None):
     """
     try:
         url = f"{EXTERNAL_API_BASE_URL}/geofile/{geofile_id}"
-        logging.debug(f"Fetching file path from: {url}")
         
         headers = {}
         if jwt_token:
             headers['Authorization'] = f'Bearer {jwt_token}'
-            logging.debug("Using JWT token for authentication")
         
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
@@ -30,21 +27,15 @@ def get_file_path_from_api(geofile_id, jwt_token=None):
         data = response.json()
 
         file_path = data.get('fileLocation')
-        # Assuming the API returns a JSON with a 'file_path' or 'path' key
-        # You may need to adjust this based on your actual API response structure
-        # file_path = data.get('file_path') or data.get('path') or data.get('filePath')
         
         if not file_path:
             return {'error': 'No file path found in API response'}
         
-        logging.debug(f"Retrieved file path: {file_path}")
         return {'file_path': file_path, 'error': None}
         
     except requests.exceptions.RequestException as e:
-        logging.error(f"API request failed: {str(e)}")
         return {'error': f'Failed to fetch from external API: {str(e)}'}
     except Exception as e:
-        logging.error(f"Unexpected error in get_file_path_from_api: {str(e)}")
         return {'error': f'Unexpected error: {str(e)}'}
 
 def get_seismic_data(geofile_id, start_trace=0, end_trace=None, jwt_token=None):
@@ -62,16 +53,22 @@ def get_seismic_data(geofile_id, start_trace=0, end_trace=None, jwt_token=None):
             n_traces = segyfile.tracecount
             n_samples = len(segyfile.samples)
             sample_rate = segyfile.samples[1] - segyfile.samples[0]
+            
             # Limit end_trace to the total number of traces
             end_trace = min(end_trace, n_traces) if end_trace else n_traces
             # Ensure start_trace and end_trace are valid
             start_trace = max(0, start_trace)
             if start_trace >= n_traces or end_trace <= start_trace:
                 return {'error': 'Invalid trace range'}
+            
             # Use bulk reading instead of individual trace access
             data = segyfile.trace.raw[start_trace:end_trace].T
-            return {
-                'data': data.tobytes(),  # Convert to binary format
+            
+            # Convert to binary format
+            binary_data = data.tobytes()
+            
+            result = {
+                'data': binary_data,  # Convert to binary format
                 'sample_rate': float(sample_rate),
                 'n_traces': end_trace - start_trace,
                 'n_samples': n_samples,
@@ -79,6 +76,9 @@ def get_seismic_data(geofile_id, start_trace=0, end_trace=None, jwt_token=None):
                 'total_traces': n_traces,
                 'dtype': str(data.dtype)  # Include data type for reconstruction
             }
+            
+            return result
+            
     except Exception as e:
         return {'error': str(e)}
     
