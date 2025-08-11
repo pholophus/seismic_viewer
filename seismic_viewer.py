@@ -27,6 +27,8 @@ def get_file_path_from_api(geofile_id, jwt_token=None):
         data = response.json()
 
         file_path = data.get('fileLocation')
+
+        file_path = f"/mnt/skkmigassfs/{file_path}"
         
         if not file_path:
             return {'error': 'No file path found in API response'}
